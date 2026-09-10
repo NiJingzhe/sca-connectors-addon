@@ -77,12 +77,32 @@ class Material:
 
 @dataclass(frozen=True)
 class Interface:
+    """A named connection end face.
+
+    Exactly one of ``method=`` (simple FEM boundary-condition label) or
+    ``spec=`` (a full mechanical joint specification from
+    :mod:`connverify.joint_types`) must be given; a spec implies its method.
+    """
+
     name: str
-    method: ConnectionMethod
+    method: Optional[ConnectionMethod] = None
+    spec: Optional[object] = None
     planarity_tol_mm: float = 0.1
     min_area_mm2: Optional[float] = None
 
     def __post_init__(self):
+        if self.spec is not None:
+            if self.method is not None:
+                raise TypeError(
+                    "Interface accepts method= or spec=, not both — "
+                    "a joint spec implies its connection method"
+                )
+            derived = getattr(self.spec, "method", None)
+            if derived is None:
+                raise TypeError("spec has no method; use a joint_types spec")
+            object.__setattr__(self, "method", derived)
+        elif self.method is None:
+            raise TypeError("Interface needs method= or spec=")
         if not isinstance(self.method, ConnectionMethod):
             raise TypeError(
                 f"Interface.method must be a ConnectionMethod, got {self.method!r}"
@@ -233,6 +253,8 @@ class VerificationEnv:
         return errors
 
     def _validate_interfaces(self) -> list:
+        from .joint_types import validate_spec
+
         errors = []
         seen = set()
         for idx, iface in enumerate(self.interfaces):
@@ -261,6 +283,9 @@ class VerificationEnv:
                     f"{where}.min_area_mm2",
                     f"must be > 0 mm², got {iface.min_area_mm2}",
                 ))
+            if iface.spec is not None:
+                for spec_field, message in validate_spec(iface.spec):
+                    errors.append((f"{where}.spec.{spec_field}", message))
         if not any(
             isinstance(i, Interface) and i.method.constrains for i in self.interfaces
         ):
@@ -435,21 +460,39 @@ def _finite(v) -> bool:
 
 
 def _interface_to_dict(i: Interface) -> dict:
-    return {
+    payload = {
         "name": i.name,
         "method": i.method.value,
         "planarity_tol_mm": i.planarity_tol_mm,
         "min_area_mm2": i.min_area_mm2,
     }
+    if i.spec is not None:
+        from .joint_types import spec_to_dict
+        payload["spec"] = spec_to_dict(i.spec)
+    return payload
 
 
 def _interface_from_dict(d: dict) -> Interface:
-    return Interface(
+    spec = None
+    if d.get("spec") is not None:
+        from .joint_types import spec_from_dict
+        try:
+            spec = spec_from_dict(d["spec"])
+        except ValueError as exc:
+            raise EnvValidationError([("interfaces.spec", str(exc))]) from exc
+    kwargs = dict(
         name=d["name"],
-        method=ConnectionMethod(d["method"]),
         planarity_tol_mm=d.get("planarity_tol_mm", 0.1),
         min_area_mm2=d.get("min_area_mm2"),
     )
+    if spec is not None:
+        return Interface(name=kwargs["name"], spec=spec,
+                         planarity_tol_mm=kwargs["planarity_tol_mm"],
+                         min_area_mm2=kwargs["min_area_mm2"])
+    return Interface(name=kwargs["name"],
+                     method=ConnectionMethod(d["method"]),
+                     planarity_tol_mm=kwargs["planarity_tol_mm"],
+                     min_area_mm2=kwargs["min_area_mm2"])
 
 
 def _load_case_to_dict(c: LoadCase) -> dict:

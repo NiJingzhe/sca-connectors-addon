@@ -257,6 +257,9 @@ def _build_case(
 
     max_node, max_vm = ranked[0]
     safety_factor = (env.material.yield_strength_mpa / max_vm) if max_vm > 0 else float("inf")
+    max_disp = _max_displacement(frd)
+
+    degenerate = (max_vm <= 0.0) or (max_disp is not None and max_disp <= 0.0)
 
     hotspots = []
     for node_id, vm in ranked[:_HOTSPOT_COUNT]:
@@ -272,8 +275,15 @@ def _build_case(
         ))
 
     suggestions: List[str] = []
-    passed = safety_factor >= env.safety_factor_required
-    if not passed:
+    passed = safety_factor >= env.safety_factor_required and not degenerate
+    if degenerate:
+        suggestions.append(
+            "load case produced zero response (no displacement, no stress): "
+            "the loads most likely act on fully constrained surfaces. Move "
+            "the load target to a free face or point, or reconsider which "
+            "interface is the support"
+        )
+    elif not passed:
         top = hotspots[0] if hotspots else None
         ratio = env.safety_factor_required / safety_factor if safety_factor > 0 else None
         if top is not None and top.on_interface in constrained:
@@ -306,7 +316,7 @@ def _build_case(
         name=outcome.name, passed=passed, error=None,
         max_von_mises_mpa=max_vm,
         safety_factor=safety_factor,
-        max_displacement_mm=_max_displacement(frd),
+        max_displacement_mm=max_disp,
         hotspots=tuple(hotspots),
         suggestions=tuple(suggestions),
         duration_s=outcome.duration_s,

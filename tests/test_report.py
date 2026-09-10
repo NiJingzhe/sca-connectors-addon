@@ -173,6 +173,40 @@ class TestFailingPaths:
         assert not report.cases[0].passed
 
 
+class TestDegenerateResponse:
+    def _zero_frd(self):
+        from connverify.frd import FrdBlock, FrdResult
+        nodes = {1: (0.0, 0.0, 0.0)}
+        return FrdResult(nodes=nodes, blocks={
+            "DISP": FrdBlock("DISP", ("D1", "D2", "D3", "D4", "D5", "D6", "ALL"),
+                             {1: (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)}),
+            "STRESS": FrdBlock("STRESS", ("SXX", "SYY", "SZZ", "SYZ", "SZX", "SXY"),
+                               {1: (0.0, 0.0, 0.0, 0.0, 0.0, 0.0)}),
+        })
+
+    def test_zero_response_marks_case_failed_with_explanation(self):
+        report = build_report(
+            env=make_env(), mesh=single_tet_mesh(),
+            conn_results=good_conn_results(), envelope_results=(),
+            outcomes=[CaseOutcome(name="op", frd=self._zero_frd(), error=None,
+                                  duration_s=0.1)],
+            face_provenance=PROVENANCE,
+        )
+        case = report.cases[0]
+        assert not case.passed
+        assert any("constrained" in s for s in case.suggestions)
+
+    def test_zero_response_fails_the_overall_report(self):
+        report = build_report(
+            env=make_env(), mesh=single_tet_mesh(),
+            conn_results=good_conn_results(), envelope_results=(),
+            outcomes=[CaseOutcome(name="op", frd=self._zero_frd(), error=None,
+                                  duration_s=0.1)],
+            face_provenance=PROVENANCE,
+        )
+        assert report.verdict == "fail"
+
+
 class TestHotspotRanking:
     def test_multiple_hotspots_sorted_by_stress_desc(self, report=None):
         report = build_report(
