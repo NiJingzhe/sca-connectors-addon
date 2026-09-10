@@ -105,6 +105,14 @@ def check_interface(loaded: LoadedPart, iface: Interface) -> InterfaceCheckResul
         messages.extend(joint_report["violations"])
         joint_ok = joint_report["passed"]
 
+    counterpart_report = None
+    if iface.counterpart is not None:
+        counterpart_report = _check_counterpart(loaded, iface)
+        messages.extend(counterpart_report["violations"])
+        joint_ok = joint_ok and counterpart_report["passed"]
+    if joint_report is not None and counterpart_report is not None:
+        joint_report["counterpart_checks"] = counterpart_report["sections"]
+
     normal = centroid = None
     if len(info.faces) == 1:
         normal = tuple(float(v) for v in info.faces[0].sdk_face.get_normal_at().to_tuple())
@@ -130,6 +138,43 @@ def check_interface(loaded: LoadedPart, iface: Interface) -> InterfaceCheckResul
 # --------------------------------------------------------------------------
 # Joint-type dispatch
 # --------------------------------------------------------------------------
+
+def _check_counterpart(loaded: LoadedPart, iface: Interface) -> dict:
+    """Run the declared counterpart's assemblability checks on one interface."""
+    from .counterpart import COUNTERPART_FOR_KIND
+
+    info = loaded.interfaces[f"interface.{iface.name}"]
+    expected_family = COUNTERPART_FOR_KIND.get(
+        iface.spec.kind if iface.spec is not None else None)
+    violations: List[str] = []
+    sections = {}
+    passed = True
+    for face_info in info.faces:
+        bolt = iface.spec if (
+            iface.spec is not None
+            and hasattr(iface.spec, "tool_radius_mm")) else None
+        sections = dict(iface.counterpart.check_against(
+            loaded, face_info.sdk_face, joint=iface.spec, bolt=bolt))
+        for name, section in sections.items():
+            if not isinstance(section, dict) or "passed" not in section:
+                continue
+            if not section["passed"]:
+                passed = False
+                for message in section.get("messages", []):
+                    violations.append(
+                        f"counterpart {sections.get('counterpart', '?')}/"
+                        f"{name}: {message}"
+                    )
+    if expected_family is not None and not isinstance(
+            iface.counterpart, expected_family):
+        passed = False
+        violations.append(
+            f"counterpart type {type(iface.counterpart).__name__} does not "
+            f"match joint kind {iface.spec.kind.value} (expected "
+            f"{expected_family.__name__})"
+        )
+    return {"passed": passed, "violations": violations, "sections": sections}
+
 
 def check_joint(loaded: LoadedPart, iface: Interface) -> dict:
     spec = iface.spec

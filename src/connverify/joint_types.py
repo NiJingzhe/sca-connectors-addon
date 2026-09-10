@@ -40,6 +40,7 @@ class JointKind(Enum):
     CLAMPED = "clamped"                  # 刚性夹持 (台面/夹具压紧)
     BEARING_SEAT = "bearing_seat"        # 轴承座孔 (H7)
     CONTACT_PAD = "contact_pad"          # 纯接触传力面（载荷入口）
+    SNAP_FIT = "snap_fit"                # 卡扣连接（卡 hook + 扣 recess）
 
 
 PERMANENT_KINDS = frozenset({
@@ -73,6 +74,7 @@ KIND_METHOD: Dict[JointKind, ConnectionMethod] = {
     JointKind.SPLINED: ConnectionMethod.CONTACT,
     JointKind.BEARING_SEAT: ConnectionMethod.CONTACT,
     JointKind.CONTACT_PAD: ConnectionMethod.CONTACT,
+    JointKind.SNAP_FIT: ConnectionMethod.CONTACT,
 }
 
 
@@ -440,6 +442,22 @@ class ContactPadSpec(_SpecBase):
         return "—"
 
 
+@dataclass(frozen=True)
+class SnapFitSpec(_SpecBase):
+    """卡扣: a flexible hook on this part latching into the counterpart's
+    recess. Hook deflection/retention force is v2; positions are v1."""
+
+    catch_height_mm: float = 2.0
+
+    @property
+    def kind(self) -> JointKind:
+        return JointKind.SNAP_FIT
+
+    @property
+    def standard(self) -> str:
+        return "snap-fit design practice (deflection checks v2)"
+
+
 _SPEC_TYPES: Dict[str, Type] = {
     "bolted_through": BoltedThroughSpec,
     "bolted_tapped": BoltedTappedSpec,
@@ -456,6 +474,7 @@ _SPEC_TYPES: Dict[str, Type] = {
     "clamped": ClampedSpec,
     "bearing_seat": BearingSeatSpec,
     "contact_pad": ContactPadSpec,
+    "snap_fit": SnapFitSpec,
 }
 
 

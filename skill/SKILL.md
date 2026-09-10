@@ -94,6 +94,39 @@ runs but performs no joint-geometry verification.
 | keyed / splined | load-entry semantics; keyway profile checks arrive in v2 (stated in the report) |
 | contact / clamped / adhesive | planarity (+ optional min bearing area) |
 
+**Counterpart verification — the joint spec IS the mating face.** To prove
+the end face can actually *assemble*, declare the mating part's nominal
+geometry in the interface's face-local frame; connverify GENERATES the
+counterpart solid from the spec and checks computationally (no mating model
+is ever built):
+
+```python
+Interface(
+    name="mount_face",
+    spec=BoltedThroughSpec(nominal_diameter_mm=10.0),
+    counterpart=PlateCounterpart(           # the wall flange it bolts onto
+        thickness_mm=8.0,
+        holes=((-15.0, -10.0, 11.0), (-15.0, 10.0, 11.0), (20.0, 0.0, 11.0)),
+        window=((-40.0, -20.0), (40.0, 20.0)),
+        fastener_length_mm=30.0),
+)
+```
+
+Local frame contract (deterministic): origin = face bounding-box center,
+n = outward normal, u = global axis least aligned with n projected onto the
+plane, v = n × u. Per-family checks, mapped for **every** JointKind
+(`COUNTERPART_FOR_KIND`):
+
+| Counterpart family | Kinds | Assemblability primitives |
+| --- | --- | --- |
+| `PlateCounterpart` | bolted-through/tapped, stud, riveted | hole-pattern match vs declared pattern (per-hole deviation + tolerance); mating-plate **interference 穿模** (OCC boolean against the generated plate); **clamp land 压紧** (washer annulus probes, ISO 7089-style ⌀2d); fastener **stack length** vs grip + nut |
+| `BoreCounterpart` | pin, interference, transition, keyed, splined, bearing seat | nominal-⌀ match; **ISO 286 fit-band arithmetic** (embedded H7 + shaft classes, interference range in µm); hub **insertion path** clearance (annulus sweep along the seat axis) |
+| `PlaneCounterpart` | fillet/butt weld, adhesive, clamped, contact pad | mating-plane interference; contact coverage over the declared window |
+| `SnapCounterpart` | snap fit | hook (卡) presence + height at the declared catch position; slot (扣) region must stay clear above the mating plane |
+
+Counterpart family must match the joint kind (mismatch is rejected). Keyed/
+spline profiles and snap deflection physics are v2 — the report says so.
+
 ```python
 from connverify.env import (ForceLoad, KeepOutBox, LoadCase, Material,
     VerificationEnv)

@@ -26,6 +26,14 @@ from .joint_geometry import (
     min_edge_distance_mm,
     pairwise_pitch_mm,
 )
+from .counterpart import (
+    BoreCounterpart,
+    PlateCounterpart,
+    PlaneCounterpart,
+    SnapCounterpart,
+    counterpart_from_dict,
+    counterpart_to_dict,
+)
 from .joint_types import (
     AdhesiveSpec,
     BearingSeatSpec,
@@ -38,6 +46,7 @@ from .joint_types import (
     KeyedSpec,
     PinnedSpec,
     RivetedSpec,
+    SnapFitSpec,
     SplinedSpec,
     StudSpec,
     TransitionSpec,
@@ -61,7 +70,7 @@ from .render import render_tag_review
 from .report import CaseOutcome, VerificationReport
 from .solver import SolveResult, SolverError, SolverNotFoundError, run_solve
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 __all__ = [
     "AdhesiveSpec",
@@ -77,6 +86,7 @@ __all__ = [
     "RivetedSpec",
     "SplinedSpec",
     "StudSpec",
+    "SnapFitSpec",
     "TransitionSpec",
     "WeldedButtSpec",
     "WeldedFilletSpec",
@@ -106,6 +116,10 @@ __all__ = [
     "FrdResult",
     "verify",
     "render_tag_review",
+    "BoreCounterpart",
+    "PlateCounterpart",
+    "PlaneCounterpart",
+    "SnapCounterpart",
     "VerificationReport",
     "CaseOutcome",
     "run_solve",

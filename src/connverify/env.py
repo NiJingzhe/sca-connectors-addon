@@ -87,6 +87,7 @@ class Interface:
     name: str
     method: Optional[ConnectionMethod] = None
     spec: Optional[object] = None
+    counterpart: Optional[object] = None
     planarity_tol_mm: float = 0.1
     min_area_mm2: Optional[float] = None
 
@@ -286,6 +287,10 @@ class VerificationEnv:
             if iface.spec is not None:
                 for spec_field, message in validate_spec(iface.spec):
                     errors.append((f"{where}.spec.{spec_field}", message))
+            if iface.counterpart is not None:
+                from .counterpart import validate_counterpart
+                for c_field, message in validate_counterpart(iface.counterpart):
+                    errors.append((f"{where}.counterpart.{c_field}", message))
         if not any(
             isinstance(i, Interface) and i.method.constrains for i in self.interfaces
         ):
@@ -469,6 +474,9 @@ def _interface_to_dict(i: Interface) -> dict:
     if i.spec is not None:
         from .joint_types import spec_to_dict
         payload["spec"] = spec_to_dict(i.spec)
+    if i.counterpart is not None:
+        from .counterpart import counterpart_to_dict
+        payload["counterpart"] = counterpart_to_dict(i.counterpart)
     return payload
 
 
@@ -480,17 +488,27 @@ def _interface_from_dict(d: dict) -> Interface:
             spec = spec_from_dict(d["spec"])
         except ValueError as exc:
             raise EnvValidationError([("interfaces.spec", str(exc))]) from exc
+    counterpart = None
+    if d.get("counterpart") is not None:
+        from .counterpart import counterpart_from_dict
+        try:
+            counterpart = counterpart_from_dict(d["counterpart"])
+        except ValueError as exc:
+            raise EnvValidationError([("interfaces.counterpart", str(exc))]) from exc
     kwargs = dict(
         name=d["name"],
         planarity_tol_mm=d.get("planarity_tol_mm", 0.1),
         min_area_mm2=d.get("min_area_mm2"),
+        counterpart=counterpart,
     )
     if spec is not None:
         return Interface(name=kwargs["name"], spec=spec,
+                         counterpart=counterpart,
                          planarity_tol_mm=kwargs["planarity_tol_mm"],
                          min_area_mm2=kwargs["min_area_mm2"])
     return Interface(name=kwargs["name"],
                      method=ConnectionMethod(d["method"]),
+                     counterpart=counterpart,
                      planarity_tol_mm=kwargs["planarity_tol_mm"],
                      min_area_mm2=kwargs["min_area_mm2"])
 
