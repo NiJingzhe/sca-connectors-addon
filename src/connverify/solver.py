@@ -81,6 +81,7 @@ def run_solve(
     deck = Path(deck_path)
     if not deck.is_file():
         raise SolverError(f"deck not found: {deck}")
+    deck = deck.resolve()  # subprocess cwd moves to the deck's directory
 
     cmd = [exe, str(deck)]
     if ncpus:

@@ -10,4 +10,4 @@ sca = ">=2.1,<3"
 [runtime]
 kind = "python-env"
 platforms = ["macos-arm64", "macos-x86_64", "linux-x86_64", "linux-aarch64"]
-check_cmd = "python -c 'import connverify, gmsh, numpy, simplecadapi'"
+check_cmd = "python3 -c 'import connverify, gmsh, numpy, simplecadapi' 2>/dev/null || python -c 'import connverify, gmsh, numpy, simplecadapi'"

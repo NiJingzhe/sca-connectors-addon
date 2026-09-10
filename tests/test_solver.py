@@ -122,3 +122,14 @@ class TestRunSolve:
         result = run_solve(deck_file, binary=fake_bin(seen), extra_args=["--ncpus", "4"])
         args = open(os.path.join(os.path.dirname(result.deck_path), "args.txt")).read()
         assert "--ncpus" in args and "4" in args
+
+    def test_relative_deck_path_resolves_against_cwd_not_deck_dir(self, fake_bin, deck_file, monkeypatch, tmp_path):
+        # regression: the subprocess cwd is the deck's directory, so a relative
+        # deck path must be made absolute before spawning
+        import os
+        os.chdir(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        relative = os.path.relpath(deck_file, tmp_path)
+        result = run_solve(relative, binary=fake_bin(FAKE_OK))
+        assert result.returncode == 0
+        assert result.frd_path and os.path.exists(result.frd_path)

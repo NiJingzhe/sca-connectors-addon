@@ -34,4 +34,20 @@ uv pip install -p .venv/bin/python -e ../SimpleCADAPI   # SDK from sibling sourc
 uv pip install -p .venv/bin/python -e ".[dev]"
 ./tools/fetch_femaster.sh                                # solver binary into vendor/
 .venv/bin/python -m pytest
+.venv/bin/python examples/plate_mount_demo.py            # full pipeline demo
+```
+
+### Runtime provisioning (for `sca` installs)
+
+The addon declares a `python-env` runtime. Provision an interpreter that can
+`import connverify, gmsh, numpy, simplecadapi` (e.g. the venv above), put it
+on PATH for the addon, and point `CONNVERIFY_FEMASTER` at a FEMaster binary.
+The descriptor's `check_cmd` probes exactly those imports; a failing probe is
+a loud stop, never a silent skip.
+
+### Verifying the addon descriptor
+
+```bash
+.venv/bin/sca addon add ./     # install from this checkout (publishing checklist)
+.venv/bin/sca addon list
 ```
