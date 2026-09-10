@@ -61,6 +61,7 @@ class LoadedPart:
     interfaces: Dict[str, InterfaceInfo]
     snapshot_bytes: bytes
     metadata: Mapping = None
+    face_provenance: Mapping = None  # topo_id -> {graph_id, node_id, output_slot}
 
     @property
     def available_interface_names(self) -> FrozenSet[str]:
@@ -122,6 +123,17 @@ def load_part(path: str) -> LoadedPart:
             ))
         interfaces[name] = InterfaceInfo(name=name, faces=tuple(faces))
 
+    provenance = {}
+    for entity in snapshot["entities"]:
+        if entity.get("kind") != "face":
+            continue
+        output = entity.get("feature_output") or {}
+        provenance[str(entity["topo_id"])] = {
+            "graph_id": str(output.get("graph_id", "")),
+            "node_id": str(output.get("node_id", "")),
+            "output_slot": int(output.get("output_slot", 0)),
+        }
+
     return LoadedPart(
         package_path=str(p),
         definition_kind=root.definition_kind,
@@ -130,6 +142,7 @@ def load_part(path: str) -> LoadedPart:
         interfaces=interfaces,
         snapshot_bytes=snapshot_bytes,
         metadata=getattr(root, "metadata", {}) or {},
+        face_provenance=provenance,
     )
 
 
