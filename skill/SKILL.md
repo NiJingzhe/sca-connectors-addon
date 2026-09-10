@@ -144,7 +144,32 @@ print(report.to_markdown())          # agent-readable
 open("out/verify/report.json").read()  # machine contract
 ```
 
-Artifacts: `decks/<CASE>.inp` (+ `.frd`/`.res`), `report.json`, `report.md`.
+Artifacts: `decks/<CASE>.inp` (+ `.frd`/`.res`), `report.json`, `report.md`,
+and `tag_review.png`.
+
+### 2b. Visually confirm the tags (mandatory before trusting results)
+
+**Look at `tag_review.png` before acting on any report.** The image shows
+the whole part in gray and each `interface.*` tag highlighted in its own
+color — one iso overview plus one straight-on face view per interface. The
+highlights are drawn from the exact triangles the checker associated, so a
+tag attached to the WRONG face at modeling time appears as a highlight on
+the wrong face, and a lost tag appears as a missing panel.
+
+Judge: does each color sit on the end face the user described? If not, the
+geometry's tag is wrong — repair it in the modeling source (re-tag the final
+geometry, e.g. `apply_tag_rselection`) and re-verify. Never "fix" the
+environment to match a wrong tag.
+
+Standalone use:
+
+```python
+from connverify.meshing import mesh_part
+from connverify.render import render_tag_review
+
+mesh = mesh_part(loaded, mesh_size_mm=8.0)
+render_tag_review(mesh, "out/tag_review.png", title="bracket")
+```
 
 ### 3. Read the report like an engineer
 
@@ -165,6 +190,8 @@ Artifacts: `decks/<CASE>.inp` (+ `.frd`/`.res`), `report.json`, `report.md`.
 3. Re-`capture` the `.scadpkg`; re-run `verify` with the SAME env JSON.
 4. Compare `max_von_mises_mpa` / `safety_factor` across runs — the
    environment is deterministic, so deltas are real geometry effects.
+5. After re-tagging or boolean-heavy edits, re-check `tag_review.png` —
+   kwarg face tags do not reliably survive multi-tool booleans.
 
 ## Physics scope (v1)
 

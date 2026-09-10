@@ -26,6 +26,7 @@ class MeshFace:
     normal: Tuple[float, float, float]      # outward unit normal
     nodes: Tuple[int, ...]
     tributary_area_mm2: Dict[int, float]    # node -> tributary area; sums to face area
+    triangles: Tuple[Tuple[int, int, int], ...] = ()  # boundary triangles on this face
 
 
 @dataclass(frozen=True)

@@ -65,6 +65,7 @@ def test_end_to_end_passing_verification(env_path, tmp_path):
     # durable artifacts: decks, results, report json + markdown
     assert (out_dir / "report.json").is_file()
     assert (out_dir / "report.md").is_file()
+    assert (out_dir / "tag_review.png").is_file()   # visual tag check artifact
     deck = out_dir / "decks" / "PRESS.inp"
     assert deck.is_file()
     payload = json.loads((out_dir / "report.json").read_text())

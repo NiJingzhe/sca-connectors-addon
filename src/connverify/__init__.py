@@ -57,10 +57,11 @@ from .package_reader import (
     require_interfaces,
 )
 from .pipeline import verify
+from .render import render_tag_review
 from .report import CaseOutcome, VerificationReport
 from .solver import SolveResult, SolverError, SolverNotFoundError, run_solve
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 __all__ = [
     "AdhesiveSpec",
@@ -104,6 +105,7 @@ __all__ = [
     "parse_frd",
     "FrdResult",
     "verify",
+    "render_tag_review",
     "VerificationReport",
     "CaseOutcome",
     "run_solve",

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "connverify"
-version = "0.2.0"
+version = "0.3.0"
 description = "Static connector verification environment addon for SimpleCADAPI (FEMaster FEM backend)"
 readme = "README.md"
 requires-python = ">=3.10,<3.14"
@@ -14,6 +14,7 @@ keywords = ["cad", "fem", "verification", "simplecadapi", "connector"]
 dependencies = [
     "numpy>=1.21",
     "gmsh>=4.15,<5",
+    "matplotlib>=3.7",
     # simplecadapi is provided by the addon runtime environment (not on public
     # PyPI); import it lazily so pure-DSL consumers work without it.
 ]

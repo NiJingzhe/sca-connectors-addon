@@ -36,6 +36,7 @@ def verify(
     femaster: Optional[str] = None,
     timeout_s: float = 600.0,
     ncpus: Optional[int] = None,
+    render_tag_check: bool = True,
 ):
     """Run the full static-connector verification and write the report."""
     env, package_path = _load_env_and_package(env_source)
@@ -53,6 +54,15 @@ def verify(
     out = Path(out_dir)
     deck_dir = out / "decks"
     deck_dir.mkdir(parents=True, exist_ok=True)
+
+    render_facts = None
+    if render_tag_check:
+        from .render import render_tag_review
+
+        render_facts = render_tag_review(
+            mesh, out / "tag_review.png",
+            title=f"tag review — {env.name}",
+        )
 
     outcomes = []
     for case in env.load_cases:

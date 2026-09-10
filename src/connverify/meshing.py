@@ -144,11 +144,13 @@ def _associate_face(interface_face, triangles, nodes, *, association_tol_mm) -> 
     face_shape = interface_face.sdk_face.wrapped
     tributary: Dict[int, float] = {}
     member_nodes = set()
+    member_triangles: list[Tuple[int, int, int]] = []
     for node_ids, centroid, area in triangles:
         vertex = make_vertex(*centroid)
         distance = point_to_face_distance(vertex, face_shape)
         if distance <= association_tol_mm:
             member_nodes.update(node_ids)
+            member_triangles.append(node_ids)
             for node_id in node_ids:
                 tributary[node_id] = tributary.get(node_id, 0.0) + area / 3.0
     normal = interface_face.sdk_face.get_normal_at().to_tuple()
@@ -157,4 +159,5 @@ def _associate_face(interface_face, triangles, nodes, *, association_tol_mm) -> 
         normal=tuple(float(v) for v in normal),
         nodes=tuple(sorted(member_nodes)),
         tributary_area_mm2=tributary,
+        triangles=tuple(member_triangles),
     )
