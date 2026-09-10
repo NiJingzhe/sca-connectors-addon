@@ -142,7 +142,3 @@ def require_interfaces(
     if missing:
         raise MissingInterfaceError(missing)
     return {name: loaded.interfaces[name] for name in sorted(required)}
-
-
-def _optional_module_unused() -> Optional[object]:  # pragma: no cover
-    return None
