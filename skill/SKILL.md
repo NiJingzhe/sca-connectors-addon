@@ -57,16 +57,48 @@ Extract from the user's words, making every number explicit:
 
 | User says | DSL object |
 | --- | --- |
-| "bolted to the wall", "welded", "clamped" | `Interface(method=ConnectionMethod.BOLTED/WELDED/FIXED)` — constraining supports |
-| "the shaft presses here", mating surface | `Interface(method=ConnectionMethod.CONTACT)` — free load-entry face |
+| "bolted to the wall with 4× M10" | `Interface(spec=BoltedThroughSpec(nominal_diameter_mm=10.0, expected_count=4))` |
+| "screwed into the base", "tapped holes" | `Interface(spec=BoltedTappedSpec(nominal_diameter_mm=8.0))` |
+| "welded all around", "6 mm fillet weld" | `Interface(spec=WeldedFilletSpec(design_leg_mm=6.0))` |
+| "press-fit onto the shaft" | `Interface(spec=InterferenceSpec(nominal_diameter_mm=20.0, fit="H7/r6"))` |
+| "located by two dowel pins" | `Interface(spec=PinnedSpec(pin_diameter_mm=6.0))` |
+| "the shaft presses here", mating surface | `Interface(spec=ContactPadSpec())` or `BearingSeatSpec(bore_diameter_mm=...)` |
 | forces / weights | `ForceLoad(target=<iface>, fx_n=..., fy_n=..., fz_n=...)` or `ForceLoad(point_mm=(x, y, z), ...)` |
 | pressure | `PressureLoad(interface=<iface>, magnitude_mpa=...)` (positive pushes onto the face) |
 | "must not stick into X" | `KeepOutBox(name=..., min_corner_mm=..., max_corner_mm=...)` |
 | material, required safety factor | `Material(...)`, `safety_factor_required=` |
 
+The **joint type is the definition of the connection end face** — it selects
+which mechanical rules actually run (see the check matrix below). A bare
+`Interface(method=ConnectionMethod.BOLDED)` is accepted for quick FEM-only
+runs but performs no joint-geometry verification.
+
+**Connection-type taxonomy** (`connverify.joint_types`):
+
+| Permanence | JointKind | Spec class |
+| --- | --- | --- |
+| detachable 可拆卸 | `BOLTED_THROUGH` `BOLDED_TAPPED` `STUD` | `BoltedThroughSpec` `BoltedTappedSpec` `StudSpec` |
+| detachable | `PINNED` `KEYED` `SPLINED` | `PinnedSpec` `KeyedSpec` `SplinedSpec` |
+| semi-permanent | `INTERFERENCE` `TRANSITION` | `InterferenceSpec` `TransitionSpec` (ISO 286) |
+| permanent 不可拆 | `WELDED_FILLET` `WELDED_BUTT` `RIVETED` `ADHESIVE` | `WeldedFilletSpec` `WeldedButtSpec` `RivetedSpec` `AdhesiveSpec` |
+| load-entry | `CLAMPED` `CONTACT_PAD` `BEARING_SEAT` | `ClampedSpec` `ContactPadSpec` `BearingSeatSpec` |
+
+**Check matrix by joint type** (rules cite their standards in every message):
+
+| Kind | Geometric checks run against the BREP |
+| --- | --- |
+| bolted / stud / riveted | holes detected exactly (face inner circular wires); pitch ≥ 2.5d, edge ≥ 1.5d (EN 1993-1-8 / BS 5950); hole ⌀ vs d0 ± 0.75 mm (EN 1090-2/ISO 273); **through-hole required** (clear shank axis); wrench + nut envelopes clear (ISO 4014 head geometry, OCC boolean); optional expected_count |
+| bolted into tapped holes | same layout rules; **blind hole required**; head-side tool access |
+| pinned / interference / transition / bearing seat | bore ⌀ vs ISO 286 **H7 limits** (embedded IT7 table); layout limits where applicable |
+| fillet-welded | mating-face planarity; local plate thickness (ray along inward normal); design leg ≥ max(AWS D1.1 T7.7 floor, 1.5·√t) — advisory if no leg declared |
+| keyed / splined | load-entry semantics; keyway profile checks arrive in v2 (stated in the report) |
+| contact / clamped / adhesive | planarity (+ optional min bearing area) |
+
 ```python
-from connverify.env import (ConnectionMethod, ForceLoad, Interface,
-    KeepOutBox, LoadCase, Material, VerificationEnv)
+from connverify.env import (ForceLoad, KeepOutBox, LoadCase, Material,
+    VerificationEnv)
+from connverify.joint_types import BoltedThroughSpec, ContactPadSpec
+from connverify.env import Interface
 
 env = VerificationEnv(
     name="motor bracket static",
@@ -75,8 +107,10 @@ env = VerificationEnv(
                       poisson_ratio=0.3, yield_strength_mpa=355.0,
                       density_t_per_mm3=7.85e-9),
     interfaces=[
-        Interface(name="mount_face", method=ConnectionMethod.BOLTED),   # wall
-        Interface(name="load_pad",   method=ConnectionMethod.CONTACT),  # motor foot
+        Interface(name="mount_face",
+                  spec=BoltedThroughSpec(nominal_diameter_mm=10.0,
+                                         bolt_grade="8.8", expected_count=4)),
+        Interface(name="load_pad", spec=ContactPadSpec()),
     ],
     load_cases=[
         LoadCase(name="operational", loads=[

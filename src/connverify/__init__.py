@@ -18,6 +18,35 @@ from .env import (
     VerificationEnv,
 )
 from .frd import FrdResult, parse_frd
+from .joint_geometry import (
+    HoleInfo,
+    detect_holes,
+    hole_axis_intersections,
+    measure_local_thickness_mm,
+    min_edge_distance_mm,
+    pairwise_pitch_mm,
+)
+from .joint_types import (
+    AdhesiveSpec,
+    BearingSeatSpec,
+    BoltedTappedSpec,
+    BoltedThroughSpec,
+    ClampedSpec,
+    ContactPadSpec,
+    InterferenceSpec,
+    JointKind,
+    KeyedSpec,
+    PinnedSpec,
+    RivetedSpec,
+    SplinedSpec,
+    StudSpec,
+    TransitionSpec,
+    WeldedButtSpec,
+    WeldedFilletSpec,
+    hex_head_dimensions,
+    it7_tolerance_mm,
+    min_fillet_leg_mm,
+)
 from .package_reader import (
     InterfaceFace,
     InterfaceInfo,
@@ -31,9 +60,30 @@ from .pipeline import verify
 from .report import CaseOutcome, VerificationReport
 from .solver import SolveResult, SolverError, SolverNotFoundError, run_solve
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = [
+    "AdhesiveSpec",
+    "BearingSeatSpec",
+    "BoltedTappedSpec",
+    "BoltedThroughSpec",
+    "ClampedSpec",
+    "ContactPadSpec",
+    "InterferenceSpec",
+    "JointKind",
+    "KeyedSpec",
+    "PinnedSpec",
+    "RivetedSpec",
+    "SplinedSpec",
+    "StudSpec",
+    "TransitionSpec",
+    "WeldedButtSpec",
+    "WeldedFilletSpec",
+    "HoleInfo",
+    "detect_holes",
+    "hex_head_dimensions",
+    "it7_tolerance_mm",
+    "min_fillet_leg_mm",
     "ConnectionMethod",
     "EnvValidationError",
     "ForceLoad",
