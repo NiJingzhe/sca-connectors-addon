@@ -1,16 +1,22 @@
 ---
 name: connverify
-description: Verify static connector parts (brackets, mounts, flanges) captured as .scadpkg product packages. Use when a connector must be checked for connection-interface validity, load-case strength (linear-static FEM via FEMaster), or keep-out envelope compliance. Consumes finished .scadpkg geometry with interface.* face tags; produces a deterministic JSON + markdown report whose findings point at the owning interfaces, features, and coordinates.
+description: Verify whether a mechanical connection end face actually assembles, holds load, and stays inside its keep-out envelope — for static connector parts (brackets, flanges, mounts, plates, shaft seats) captured as SimpleCADAPI .scadpkg packages. Use whenever a part mates with a counterpart through any of these joint kinds — bolted through-holes, screws/bolts into tapped holes, studs, rivets, dowel/parallel pins, keys or splines, press (interference) or transition ISO 286 fits, fillet or butt welds, adhesives, clamped pads, bearing seats (H7), plain contact pads, snap fits (螺栓/螺钉/螺柱/铆/销/键/花键/过盈·过渡配合/焊接/粘接/夹持/轴承座/接触面/卡扣). Consumes a single-part .scadpkg whose mating faces carry interface.* tags, plus a VerificationEnv declaring per-interface JointSpec and counterpart geometry, materials, load cases, and keep-out boxes. Deterministically checks hole pitch/edge distances (EN 1993-1-8), clearance-hole diameters, through/blind requirement, H7 bore limits, fillet-leg minimums (AWS D1.1), wrench/nut access envelopes, and counterpart assemblability — hole-pattern match, mating-plane interference, clamp-land support, ISO 286 interference range, hub insertion path, snap hook/slot alignment; then meshes (gmsh tets) and solves linear-static FEM via FEMaster with safety factors and von Mises hotspots attributed to the owning interface and feature-graph node. Emits report.json + report.md and a color-highlighted tag_review.png. Never modifies geometry; every finding points at the interface, feature, or coordinates to change.
 license: Apache-2.0
 metadata:
   project: sca-fem-addone
-  version: 0.1.0
+  version: 0.4.1
 ---
 
 # connverify — static connector verification
 
 Turn a natural-language verification request into a **formal, deterministic
 verification environment**, run it, and read a **geometry-directed** report.
+
+**Verifiable joint kinds** (the same list routes this skill — see the
+frontmatter description): bolted through · bolted into tapped holes · stud ·
+riveted · pinned (dowel/parallel) · keyed · splined · interference fit ·
+transition fit · fillet weld · butt weld · adhesive · clamped pad ·
+bearing seat (H7) · contact pad · snap fit.
 
 ```
 natural language ──agent──▶ VerificationEnv (Python DSL, validated, JSON)
