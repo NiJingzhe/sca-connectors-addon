@@ -1,0 +1,13 @@
+[addon]
+name = "connverify"
+version = "0.1.0"
+license = "Apache-2.0"
+skill_path = "skill"
+
+[compat]
+sca = ">=2.1,<3"
+
+[runtime]
+kind = "python-env"
+platforms = ["macos-arm64", "macos-x86_64", "linux-x86_64", "linux-aarch64"]
+check_cmd = "python -c 'import connverify, gmsh, numpy, simplecadapi'"

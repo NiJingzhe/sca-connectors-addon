@@ -1,0 +1,29 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "connverify"
+version = "0.1.0"
+description = "Static connector verification environment addon for SimpleCADAPI (FEMaster FEM backend)"
+readme = "README.md"
+requires-python = ">=3.10,<3.14"
+license = { text = "Apache-2.0" }
+authors = [{ name = "sca-fem-addone" }]
+keywords = ["cad", "fem", "verification", "simplecadapi", "connector"]
+dependencies = [
+    "numpy>=1.21",
+    "gmsh>=4.15,<5",
+    # simplecadapi is provided by the addon runtime environment (not on public
+    # PyPI); import it lazily so pure-DSL consumers work without it.
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/connverify"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

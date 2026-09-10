@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+dist/
+build/
+out/
+*.frd
+*.res
+*.brep
+*.msh
+vendor/
+lark-im-resources/
+.DS_Store
