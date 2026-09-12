@@ -1,13 +1,13 @@
 ---
-name: sca-connectors-addone
+name: sca-connectors-addon
 description: Verify whether a mechanical connection end face actually assembles, holds load, and stays inside its keep-out envelope — for static connector parts (brackets, flanges, mounts, plates, shaft seats) captured as SimpleCADAPI .scadpkg packages. Use whenever a part mates with a counterpart through any of these joint kinds — bolted through-holes, screws/bolts into tapped holes, studs, rivets, dowel/parallel pins, keys or splines, press (interference) or transition ISO 286 fits, fillet or butt welds, adhesives, clamped pads, bearing seats (H7), plain contact pads, snap fits (螺栓/螺钉/螺柱/铆/销/键/花键/过盈·过渡配合/焊接/粘接/夹持/轴承座/接触面/卡扣). Consumes a single-part .scadpkg whose mating faces carry interface.* tags, plus a VerificationEnv declaring per-interface JointSpec and counterpart geometry, materials, load cases, keep-out boxes, and an optional MeshStudy. Deterministically checks hole pitch/edge distances (EN 1993-1-8), clearance-hole diameters, through/blind requirement, H7 bore limits, fillet-leg minimums (AWS D1.1), wrench/nut access envelopes, and counterpart assemblability — hole-pattern match, mating-plane interference, clamp-land support, ISO 286 interference range, hub insertion path, snap hook/slot alignment; then gates the gmsh tet mesh on element quality (signed volume / aspect-ratio hard limits, SICN cross-check — inverted meshes are never solved), solves linear-static FEM via FEMaster with safety factors and von Mises hotspots attributed to the owning interface and feature-graph node, and optionally proves mesh independence via a three-mesh h-refinement study (finest-pair ΔQ criterion, observed order, Richardson limit, GCI). Emits report.json + report.md (with mesh-quality, mesh-independence and assumptions sections), a color-highlighted tag_review.png, a von Mises stress_<CASE>.png contour per solved load case, and a convergence.png study plot. Never modifies geometry; every finding points at the interface, feature, or coordinates to change.
 license: Apache-2.0
 metadata:
-  project: sca-connectors-addone
+  project: sca-connectors-addon
   version: 0.6.0
 ---
 
-# sca-connectors-addone — static connector verification (python package: connverify)
+# sca-connectors-addon — static connector verification (python package: connverify)
 
 Turn a natural-language verification request into a **formal, deterministic
 verification environment**, run it, and read a **geometry-directed** report.
@@ -37,7 +37,7 @@ Run everything through the addon's own environment with `sca addon use`
 is exported):
 
 ```bash
-sca addon use sca-connectors-addone python -c "import connverify, gmsh, numpy, simplecadapi"
+sca addon use sca-connectors-addon python -c "import connverify, gmsh, numpy, simplecadapi"
 # solver binary — any of:
 export CONNVERIFY_FEMASTER=/path/to/FEMaster   # or femaster on PATH,
                                                # or $SCA_ADDON_DIR/vendor/FEMaster

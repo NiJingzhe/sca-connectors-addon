@@ -72,7 +72,7 @@ from .report import CaseOutcome, VerificationReport
 from .solver import SolveResult, SolverError, SolverNotFoundError, run_solve
 from .meshquality import MeshQualityStats, compute_mesh_quality
 
-__version__ = "0.6.0"
+__version__ = "0.6.1"
 
 __all__ = [
     "AdhesiveSpec",

@@ -1,8 +1,8 @@
-# sca-connectors-addone — 静态连接件验证环境 (SimpleCADAPI addon)
+# sca-connectors-addon — 静态连接件验证环境 (SimpleCADAPI addon)
 
 Static connector verification environment plugin for SimpleCADAPI, with
 FEMaster as the FEM backend. Addon name, skill name, and repository name
-are one identity: `sca-connectors-addone` (the Python distribution /
+are one identity: `sca-connectors-addon` (the Python distribution /
 import package inside the addon is `connverify`).
 
 A connector verification environment is three formal object classes:
@@ -23,7 +23,7 @@ feedback report.
 
 - `src/connverify/` — runtime package
 - `skill/SKILL.md` — agent-facing skill document (installed as
-  `sca-connectors-addone`)
+  `sca-connectors-addon`)
 - `tests/` — pytest suite (TDD)
 - `vendor/` — local FEMaster binary (dev only; not committed — see
   `tools/fetch_femaster.sh`)
@@ -52,7 +52,7 @@ command_prefix = 'PATH="{addon_dir}/.venv/bin:$PATH"'
 Every dispatch runs through that prefix — `sca addon use` joins it in
 front of your command, and the descriptor's `check_cmd` is probed
 through it too. `{addon_dir}` resolves to the installed addon directory
-(`~/.sca/addons/sca-connectors-addone` by default). Provision the
+(`~/.sca/addons/sca-connectors-addon` by default). Provision the
 interpreter there so the addon owns its environment:
 
 ```bash
@@ -70,11 +70,11 @@ FEMaster binary (see `tools/fetch_femaster.sh`).
 ### Verifying the addon descriptor
 
 ```bash
-.venv/bin/sca addon add NiJingzhe/sca-connectors-addone   # install from GitHub
+.venv/bin/sca addon add NiJingzhe/sca-connectors-addon   # install from GitHub
 .venv/bin/sca addon list
-.venv/bin/sca addon use sca-connectors-addone \
+.venv/bin/sca addon use sca-connectors-addon \
     python -c 'import connverify; print(connverify.__version__)'
-.venv/bin/sca addon use sca-connectors-addone    # report prefix + addon dir
+.venv/bin/sca addon use sca-connectors-addon    # report prefix + addon dir
 ```
 
 The naming standard (repository == descriptor == skill frontmatter) and

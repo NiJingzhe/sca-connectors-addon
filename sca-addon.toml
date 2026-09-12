@@ -1,12 +1,12 @@
 [addon]
-name = "sca-connectors-addone"
-version = "0.6.0"
+name = "sca-connectors-addon"
+version = "0.6.1"
 license = "Apache-2.0"
 skill_path = "skill"
 
 [compat]
-# [runtime].command_prefix and 'sca addon use' require the SDK 2.2 standard.
-sca = ">=2.2,<3"
+# [runtime].command_prefix and 'sca addon use' first shipped in SDK 2.1.3b3.
+sca = ">=2.1.3b3,<3"
 
 [runtime]
 kind = "python-env"

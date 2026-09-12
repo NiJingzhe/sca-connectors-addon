@@ -4,12 +4,12 @@ build-backend = "hatchling.build"
 
 [project]
 name = "connverify"
-version = "0.6.0"
+version = "0.6.1"
 description = "Static connector verification environment addon for SimpleCADAPI (FEMaster FEM backend)"
 readme = "README.md"
 requires-python = ">=3.10,<3.14"
 license = { text = "Apache-2.0" }
-authors = [{ name = "sca-fem-addone" }]
+authors = [{ name = "sca-connectors-addon" }]
 keywords = ["cad", "fem", "verification", "simplecadapi", "connector"]
 dependencies = [
     "numpy>=1.21",
