@@ -1,10 +1,10 @@
 ---
 name: connverify
-description: Verify whether a mechanical connection end face actually assembles, holds load, and stays inside its keep-out envelope — for static connector parts (brackets, flanges, mounts, plates, shaft seats) captured as SimpleCADAPI .scadpkg packages. Use whenever a part mates with a counterpart through any of these joint kinds — bolted through-holes, screws/bolts into tapped holes, studs, rivets, dowel/parallel pins, keys or splines, press (interference) or transition ISO 286 fits, fillet or butt welds, adhesives, clamped pads, bearing seats (H7), plain contact pads, snap fits (螺栓/螺钉/螺柱/铆/销/键/花键/过盈·过渡配合/焊接/粘接/夹持/轴承座/接触面/卡扣). Consumes a single-part .scadpkg whose mating faces carry interface.* tags, plus a VerificationEnv declaring per-interface JointSpec and counterpart geometry, materials, load cases, and keep-out boxes. Deterministically checks hole pitch/edge distances (EN 1993-1-8), clearance-hole diameters, through/blind requirement, H7 bore limits, fillet-leg minimums (AWS D1.1), wrench/nut access envelopes, and counterpart assemblability — hole-pattern match, mating-plane interference, clamp-land support, ISO 286 interference range, hub insertion path, snap hook/slot alignment; then meshes (gmsh tets) and solves linear-static FEM via FEMaster with safety factors and von Mises hotspots attributed to the owning interface and feature-graph node. Emits report.json + report.md and a color-highlighted tag_review.png. Never modifies geometry; every finding points at the interface, feature, or coordinates to change.
+description: Verify whether a mechanical connection end face actually assembles, holds load, and stays inside its keep-out envelope — for static connector parts (brackets, flanges, mounts, plates, shaft seats) captured as SimpleCADAPI .scadpkg packages. Use whenever a part mates with a counterpart through any of these joint kinds — bolted through-holes, screws/bolts into tapped holes, studs, rivets, dowel/parallel pins, keys or splines, press (interference) or transition ISO 286 fits, fillet or butt welds, adhesives, clamped pads, bearing seats (H7), plain contact pads, snap fits (螺栓/螺钉/螺柱/铆/销/键/花键/过盈·过渡配合/焊接/粘接/夹持/轴承座/接触面/卡扣). Consumes a single-part .scadpkg whose mating faces carry interface.* tags, plus a VerificationEnv declaring per-interface JointSpec and counterpart geometry, materials, load cases, keep-out boxes, and an optional MeshStudy. Deterministically checks hole pitch/edge distances (EN 1993-1-8), clearance-hole diameters, through/blind requirement, H7 bore limits, fillet-leg minimums (AWS D1.1), wrench/nut access envelopes, and counterpart assemblability — hole-pattern match, mating-plane interference, clamp-land support, ISO 286 interference range, hub insertion path, snap hook/slot alignment; then gates the gmsh tet mesh on element quality (signed volume / aspect-ratio hard limits, SICN cross-check — inverted meshes are never solved), solves linear-static FEM via FEMaster with safety factors and von Mises hotspots attributed to the owning interface and feature-graph node, and optionally proves mesh independence via a three-mesh h-refinement study (finest-pair ΔQ criterion, observed order, Richardson limit, GCI). Emits report.json + report.md (with mesh-quality, mesh-independence and assumptions sections), a color-highlighted tag_review.png, a von Mises stress_<CASE>.png contour per solved load case, and a convergence.png study plot. Never modifies geometry; every finding points at the interface, feature, or coordinates to change.
 license: Apache-2.0
 metadata:
   project: sca-fem-addone
-  version: 0.4.1
+  version: 0.5.0
 ---
 
 # connverify — static connector verification
@@ -183,8 +183,29 @@ print(report.to_markdown())          # agent-readable
 open("out/verify/report.json").read()  # machine contract
 ```
 
-Artifacts: `decks/<CASE>.inp` (+ `.frd`/`.res`), `report.json`, `report.md`,
-and `tag_review.png`.
+Artifacts: `decks/<CASE>.inp` (+ `.frd`/`.res`), `stress_<CASE>.png`
+(von Mises contour, hotspot circled), `report.json`, `report.md`, and
+`tag_review.png`.
+
+To prove the numbers are **mesh-independent** (required before trusting a
+peak stress), declare a study instead of a single size — the environment
+then owns the mesh family and the run solves every case on every mesh:
+
+```python
+env = VerificationEnv(
+    ...,
+    mesh_study=MeshStudy(sizes_mm=(9.0, 6.0, 4.0),  # geometric, coarse→fine
+                         qoi_tolerance_pct=5.0),
+)
+report = verify(env, out_dir="out/verify")   # no mesh_size_mm — study owns it
+```
+
+Artifacts additionally: `decks/h<SIZE>/<CASE>.inp` per size and
+`convergence.png` (QoI vs mesh size, Richardson limit dashed). Pick sizes
+with a **constant ratio** (e.g. r = 1.5 → 9 / 6 / 4) — only then are
+observed order, Richardson limit and GCI computed; and pick sizes small
+enough to actually refine the part (verify node counts grow in
+`analysis_quality.convergence.cases[].points`).
 
 ### 2b. Visually confirm the tags (mandatory before trusting results)
 
@@ -200,25 +221,40 @@ geometry's tag is wrong — repair it in the modeling source (re-tag the final
 geometry, e.g. `apply_tag_rselection`) and re-verify. Never "fix" the
 environment to match a wrong tag.
 
+**`stress_<CASE>.png` is the visual half of the FEM report**: per-node von
+Mises painted on the mesh surface with a colorbar, camera facing the
+hotspot node (white circle). Confirm the hot region sits where the report
+says and where the load path predicts.
+
 Standalone use:
 
 ```python
 from connverify.meshing import mesh_part
-from connverify.render import render_tag_review
+from connverify.render import render_stress_contour, render_tag_review
+from connverify.frd import parse_frd
 
 mesh = mesh_part(loaded, mesh_size_mm=8.0)
 render_tag_review(mesh, "out/tag_review.png", title="bracket")
+render_stress_contour(mesh, parse_frd("out/verify/decks/CASE.frd"),
+                      "out/stress_CASE.png")
 ```
 
 ### 3. Read the report like an engineer
 
-- `verdict` — pass only if interfaces, envelopes, AND every load case pass.
+- `verdict` — pass only if interfaces, envelopes, every load case, the
+  mesh-quality gate, AND (when declared) the mesh-independence study pass.
 - Per load case: `max_von_mises_mpa`, `safety_factor = Re / max_vM`,
   `max_displacement_mm`, top-3 hotspots each with `location_mm`,
   `on_interface` (preferentially the constrained one), and
   `owning_feature` — the feature-graph node that **produced the hotspot's
   BREP face** (from the package's topology snapshot; `graph_id` + `node_id`
   map straight back into the modeling feature tree).
+- `analysis_quality` — mesh element type/size, full quality stats, the
+  convergence dossier (points, ΔQ series, observed order, Richardson
+  limit, GCI), and the assumption list. The report also renders
+  `## Mesh quality`, `## Mesh independence` and
+  `## Analysis quality & assumptions` sections; a single-mesh run states
+  plainly that independence was **not verified**.
 - `feedback` — ordered, actionable items with numbers and locations.
 
 ### 4. Repair loop (geometry changes live in the modeling workflow)
@@ -231,6 +267,41 @@ render_tag_review(mesh, "out/tag_review.png", title="bracket")
    environment is deterministic, so deltas are real geometry effects.
 5. After re-tagging or boolean-heavy edits, re-check `tag_review.png` —
    kwarg face tags do not reliably survive multi-tool booleans.
+
+## Mesh quality & mesh independence (built-in evidence)
+
+Two deterministic gates protect every FEM number this addon reports.
+
+**Quality gate (always on, before any solve).** Every tetrahedron is
+checked geometrically: signed volume (inverted/zero-volume elements are a
+hard FAIL — the mesh is never solved), normalized radius-ratio aspect
+ratio (1 = regular tetrahedron; max > 10 is a hard FAIL, > 5 on more than
+5% of elements is a warning), plus gmsh's minSICN as a cross-check (< 0.05
+warns). Failures name the worst element's coordinates so the geometry or
+target size can be repaired. The full statistics land in
+`analysis_quality.mesh.quality` and the `## Mesh quality` report section.
+
+**Mesh-independence study (opt-in via `MeshStudy`).** Declares an
+h-refinement family and a tolerance; the pipeline meshes + solves every
+case on every size, then judges the quantities of interest
+(max von Mises, max displacement):
+
+- **Pass criterion**: the finest-pair relative change ΔQ of both QoIs
+  ≤ `qoi_tolerance_pct` (the tolerance should come from the decision the
+  report feeds, typically 1–5%).
+- With three geometrically graded meshes: **observed order** p_obs,
+  **Richardson extrapolated limit**, and **GCI** (Fs = 1.25) — the
+  estimated remaining discretization uncertainty of the finest mesh.
+- An unconverged study FAILS the verdict, and a monotonically *rising*
+  peak is flagged as the **singularity signature** (sharp re-entrant
+  edge / point load / constrained boundary): the fix is a fillet or a
+  path-averaged criterion, not a finer mesh. Oscillatory or
+  non-monotone differences are reported as such — never averaged into a
+  false plateau.
+- The single-mesh default honestly reports `performed: false`; peak
+  stresses from such a run are mesh-size sensitive (C3D4) and must not
+  anchor a final strength claim without either a study or a stated
+  assumption.
 
 ## Physics scope (v1)
 
@@ -252,6 +323,8 @@ render_tag_review(mesh, "out/tag_review.png", title="bracket")
 | mating-face planarity (bolted/welded/fixed) | exact BREP surface type + sample fit, tolerance `planarity_tol_mm` |
 | bearing area ≥ `min_area_mm2` | exact BREP face areas |
 | keep-out compliance | OCC boolean intersection (volume + region bbox) |
+| mesh element quality | signed volume + radius-ratio aspect ratio (numpy), gmsh minSICN cross-check; inverted/degenerate meshes are never solved |
+| mesh independence | optional `MeshStudy`: finest-pair ΔQ vs tolerance; observed order, Richardson limit, GCI on geometric families; singularity signature flagged |
 | strength per load case | FEMaster linear-static solve, nodal von Mises vs `Re / SF_req` |
 
 No claims of strength, fatigue, thermal, vibration, tolerance compliance, or

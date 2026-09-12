@@ -262,3 +262,55 @@ class TestDefaultsAreExplicit:
                 ForceLoad(target="m", fy_n=-1.0)])]).safety_factor_required
         assert env_kwargs_default == 1.5
         assert env.safety_factor_required == 1.5
+
+
+class TestMeshStudy:
+    def test_valid_study_round_trips(self):
+        from connverify.env import MeshStudy
+        env = make_env(mesh_study=MeshStudy(
+            sizes_mm=(12.0, 8.0, 5.333), qoi_tolerance_pct=2.0))
+        clone = VerificationEnv.from_json(env.to_json())
+        assert clone.mesh_study is not None
+        assert clone.mesh_study.sizes_mm == (12.0, 8.0, 5.333)
+        assert clone.mesh_study.qoi_tolerance_pct == 2.0
+
+    def test_sizes_are_canonicalized_coarse_to_fine(self):
+        from connverify.env import MeshStudy
+        study = MeshStudy(sizes_mm=(5.333, 12.0, 8.0))
+        assert study.sizes_mm == (12.0, 8.0, 5.333)
+
+    def test_env_without_study_stays_valid_and_omits_the_key(self):
+        payload = json.loads(make_env().to_json())
+        assert "mesh_study" not in payload
+        clone = VerificationEnv.from_json(json.dumps(payload))
+        assert clone.mesh_study is None
+
+    def test_single_size_rejected(self):
+        from connverify.env import MeshStudy
+        env = make_env(mesh_study=MeshStudy(sizes_mm=(8.0,)))
+        with pytest.raises(EnvValidationError) as ei:
+            env.validate()
+        assert any(f.startswith("mesh_study")
+                   for f, _m in ei.value.errors)
+
+    def test_duplicate_sizes_rejected(self):
+        from connverify.env import MeshStudy
+        env = make_env(mesh_study=MeshStudy(sizes_mm=(12.0, 8.0, 8.0)))
+        with pytest.raises(EnvValidationError) as ei:
+            env.validate()
+        assert any("distinct" in m for _f, m in ei.value.errors)
+
+    @pytest.mark.parametrize("bad", [0.0, -2.0, 30.0])
+    def test_out_of_range_tolerance_rejected(self, bad):
+        from connverify.env import MeshStudy
+        env = make_env(mesh_study=MeshStudy(
+            sizes_mm=(12.0, 8.0, 5.333), qoi_tolerance_pct=bad))
+        with pytest.raises(EnvValidationError) as ei:
+            env.validate()
+        assert any("qoi_tolerance_pct" in f for f, _m in ei.value.errors)
+
+    def test_from_json_rejects_wrong_study_type(self):
+        payload = json.loads(make_env().to_json())
+        payload["mesh_study"] = {"sizes_mm": "big", "qoi_tolerance_pct": 2.0}
+        with pytest.raises(EnvValidationError):
+            VerificationEnv.from_json(json.dumps(payload))

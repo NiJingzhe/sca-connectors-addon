@@ -4,6 +4,10 @@ The mesh is linear tetrahedra (C3D4). Interface faces carry the BREP face
 identity (``topo_id``) they lie on, the outward unit normal, their mesh nodes,
 and each node's tributary area — the load-distribution weight that makes nodal
 force lumping result-exact.
+
+``quality`` carries the deterministic element-quality gate (see
+:mod:`connverify.meshquality`) and ``target_size_mm`` records the mesher
+target actually used, so a report can always quote the mesh behind its numbers.
 """
 
 from __future__ import annotations
@@ -34,6 +38,8 @@ class Mesh:
     nodes: Dict[int, Tuple[float, float, float]]     # id -> (x, y, z) in mm
     tets: Tuple[Tet, ...]
     interface_faces: Dict[str, Tuple[MeshFace, ...]]  # short name (no prefix)
+    quality: object = None          # MeshQualityStats (None for hand-built meshes)
+    target_size_mm: float | None = None  # mesher target actually used (auto rule resolved)
 
     @property
     def node_count(self) -> int:

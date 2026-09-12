@@ -13,13 +13,25 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
 from .conncheck import InterfaceCheckResult
-from .env import VerificationEnv
+from .convergence import CaseConvergence
+from .env import MeshStudy, VerificationEnv
 from .envelope import EnvelopeCheckResult
 from .frd import FrdParseError, FrdResult
 from .mesh_model import Mesh
 
-SCHEMA_VERSION = "1.0"
+SCHEMA_VERSION = "1.1"
 _HOTSPOT_COUNT = 3
+
+_ASSUMPTIONS = (
+    "element: C3D4 linear tets — stiffer than quadratic elements; peak "
+    "stress at concentrations is mesh-size sensitive (see mesh independence)",
+    "curvature-based sizing disabled: curved faces are faceted at the target "
+    "size (interface association tolerances absorb the chord sagitta)",
+    "solver: FEMaster direct sparse, linear static — run check = exit code, "
+    "result-file presence, and the zero-response guard",
+    "units: mm, N, N·mm, MPa (density t/mm³); the addon never modifies "
+    "geometry",
+)
 
 
 @dataclass(frozen=True)
@@ -82,6 +94,7 @@ class VerificationReport:
     envelopes: Tuple[EnvelopeCheckResult, ...]
     cases: Tuple[CaseReport, ...]
     feedback: Tuple[str, ...]
+    analysis_quality: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return {
@@ -92,6 +105,7 @@ class VerificationReport:
             "connections": [c.to_dict() for c in self.connections],
             "envelopes": [e.to_dict() for e in self.envelopes],
             "load_cases": [c.to_dict() for c in self.cases],
+            "analysis_quality": self.analysis_quality,
             "feedback": list(self.feedback),
         }
 
@@ -146,11 +160,85 @@ class VerificationReport:
             for suggestion in case.suggestions:
                 lines.append(f"  - next: {suggestion}")
         lines.append("")
+        lines.extend(self._mesh_quality_markdown())
+        lines.extend(self._mesh_independence_markdown())
+        lines.extend(self._assumptions_markdown())
         if self.feedback:
             lines.append("## Feedback")
             for item in self.feedback:
                 lines.append(f"- {item}")
         return "\n".join(lines) + "\n"
+
+    # ------------------------------------------------ md section renderers
+
+    def _mesh_quality_markdown(self) -> List[str]:
+        quality = self.analysis_quality.get("mesh", {}).get("quality")
+        lines = ["## Mesh quality"]
+        if quality is None:
+            lines.append("- not computed (mesh was built outside the pipeline)")
+            lines.append("")
+            return lines
+        mark = "ok" if quality["passed"] else "FAIL"
+        sicn = quality["sicn_min"]
+        sicn_text = "n/a" if sicn is None else f"{sicn:.3f}"
+        lines.append(
+            f"- [{mark}] {quality['tet_count']} C3D4 tets: aspect ratio "
+            f"mean {quality['aspect_ratio_mean']:.2f} / p95 "
+            f"{quality['aspect_ratio_p95']:.2f} / max "
+            f"{quality['aspect_ratio_max']:.2f} (fail > "
+            f"{quality['aspect_ratio_fail_limit']:.0f}), min SICN "
+            f"{sicn_text}, {quality['inverted_tets']} inverted"
+        )
+        for warning in quality["warnings"]:
+            lines.append(f"  - warn: {warning}")
+        for failure in quality["failures"]:
+            lines.append(f"  - FAIL: {failure}")
+        lines.append("")
+        return lines
+
+    def _mesh_independence_markdown(self) -> List[str]:
+        conv = self.analysis_quality.get("convergence", {})
+        lines = ["## Mesh independence"]
+        if not conv.get("performed"):
+            lines.append(
+                "- not performed: single-mesh run — declare "
+                "VerificationEnv(mesh_study=MeshStudy(sizes_mm=[...], "
+                "qoi_tolerance_pct=...)) to prove the results are "
+                "mesh-independent before trusting peak stresses"
+            )
+            lines.append("")
+            return lines
+        sizes = conv.get("sizes_mm") or []
+        family = ", ".join(f"{s:g}" for s in sizes)
+        lines.append(
+            f"- family {family} mm, tolerance "
+            f"{conv.get('qoi_tolerance_pct')!s}% on the finest-pair change "
+            "of max von Mises / max displacement"
+        )
+        for case in conv.get("cases", []):
+            mark = "ok" if case["converged"] else "FAIL"
+            deltas = " → ".join(
+                f"{d:.2f}%" for d in case["adjacent_deltas_pct"]) or "n/a"
+            extra = ""
+            if case["observed_order"] is not None:
+                extra += f", observed order {case['observed_order']:.2f}"
+            if case["richardson_extrapolated_mpa"] is not None:
+                extra += (f", Richardson limit "
+                          f"{case['richardson_extrapolated_mpa']:.1f} MPa")
+            if case["gci_fine_pct"] is not None:
+                extra += f", GCI(fine) {case['gci_fine_pct']:.2f}%"
+            lines.append(f"- [{mark}] {case['name']}: ΔQ {deltas}{extra}")
+            for note in case["notes"]:
+                lines.append(f"  - note: {note}")
+        lines.append("")
+        return lines
+
+    def _assumptions_markdown(self) -> List[str]:
+        lines = ["## Analysis quality & assumptions"]
+        for item in self.analysis_quality.get("assumptions", ()):
+            lines.append(f"- {item}")
+        lines.append("")
+        return lines
 
 
 def build_report(
@@ -161,6 +249,9 @@ def build_report(
     envelope_results,
     outcomes,
     face_provenance,
+    meshes=None,
+    convergence: Tuple[CaseConvergence, ...] = (),
+    mesh_study: Optional[MeshStudy] = None,
 ) -> VerificationReport:
     constrained = [i.name for i in env.interfaces if i.method.constrains]
     loaded = [i.name for i in env.interfaces if not i.method.constrains]
@@ -171,7 +262,26 @@ def build_report(
             env, mesh, outcome, face_provenance, constrained, loaded,
         ))
 
+    quality = mesh.quality
+    quality_ok = quality is None or quality.passed
+    convergence_ok = not convergence or all(c.converged for c in convergence)
+
     feedback: List[str] = []
+    if quality is not None and not quality.passed:
+        for failure in quality.failures:
+            feedback.append(f"mesh quality: {failure}")
+        for warning in quality.warnings:
+            feedback.append(f"mesh quality: {warning}")
+    for case_conv in convergence:
+        if not case_conv.converged:
+            feedback.append(
+                f"mesh independence: case '{case_conv.name}' did not converge "
+                f"(finest-pair change {case_conv.max_adjacent_delta_pct:.2f}% "
+                f"> tolerance) — refine the family further or accept the "
+                "documented risk explicitly"
+            )
+        for note in case_conv.notes:
+            feedback.append(f"mesh independence: case '{case_conv.name}': {note}")
     for envelope in envelope_results:
         if not envelope.passed:
             (xmin, ymin, zmin), (xmax, ymax, zmax) = envelope.intersection_bbox_mm
@@ -196,6 +306,8 @@ def build_report(
         all(c.passed for c in conn_results)
         and all(e.passed for e in envelope_results)
         and all(c.passed for c in case_reports)
+        and quality_ok
+        and convergence_ok
     )
 
     return VerificationReport(
@@ -212,13 +324,44 @@ def build_report(
             "safety_factor_required": env.safety_factor_required,
             "mesh_nodes": mesh.node_count,
             "mesh_tets": mesh.tet_count,
+            "mesh_size_mm": _round(mesh.target_size_mm),
             "stress_source": "nodal extrapolation, linear tets (C3D4)",
         },
         connections=tuple(conn_results),
         envelopes=tuple(envelope_results),
         cases=tuple(case_reports),
         feedback=tuple(feedback),
+        analysis_quality=_analysis_quality(
+            mesh=mesh, meshes=meshes, convergence=convergence,
+            mesh_study=mesh_study),
     )
+
+
+def _analysis_quality(*, mesh, meshes, convergence, mesh_study) -> dict:
+    """The verification-quality dossier: what was checked, how well, with
+    which caveats — so a report consumer can judge the numbers, not just
+    read them."""
+    quality = mesh.quality
+    family = [m for _s, m in (meshes or ())] or [mesh]
+    return {
+        "mesh": {
+            "element_type": "C3D4 (4-node linear tetrahedron)",
+            "size_mm": _round(mesh.target_size_mm),
+            "node_count": mesh.node_count,
+            "tet_count": mesh.tet_count,
+            "quality": quality.to_dict() if quality is not None else None,
+        },
+        "convergence": {
+            "performed": bool(convergence),
+            "qoi_tolerance_pct": (
+                mesh_study.qoi_tolerance_pct if mesh_study is not None else None),
+            "sizes_mm": [_round(m.target_size_mm) for m in family],
+            "cases": [c.to_dict() for c in convergence],
+            "passed": (all(c.converged for c in convergence)
+                       if convergence else None),
+        },
+        "assumptions": list(_ASSUMPTIONS),
+    }
 
 
 def _build_case(

@@ -5,7 +5,13 @@ the interface's BREP faces with an OCC distance query (point-to-trimmed-face),
 so a node belongs to an interface face only when it geometrically lies on it.
 """
 
+import math
+
 import pytest
+import simplecadapi as scad
+from OCP.BRepAdaptor import BRepAdaptor_Surface
+from OCP.GeomAbs import GeomAbs_SurfaceType
+from simplecadapi import capture
 
 from connverify.meshing import mesh_part
 from connverify.package_reader import load_part
@@ -19,6 +25,30 @@ def loaded(probe_box_pkg):
 @pytest.fixture(scope="module")
 def mesh(loaded):
     return mesh_part(loaded, mesh_size_mm=10.0)
+
+
+@scad.part(id="journal_pin")
+def build_journal_pin() -> scad.Part:
+    """⌀20 x 30 pin; interface.seat = the cylindrical side face."""
+    body = scad.make_cylinder_rsolid(radius=10.0, height=30.0,
+                                     bottom_face_center=(0.0, 0.0, 0.0))
+    faces = scad.ql.faces().resolve(body)
+    side = [
+        f for f in faces
+        if BRepAdaptor_Surface(f.wrapped).GetType()
+        == GeomAbs_SurfaceType.GeomAbs_Cylinder
+    ]
+    assert len(side) == 1
+    tagged = scad.apply_tag_rselection(body, side, "interface.seat")
+    return scad.make_part_rpart(part_id="journal_pin", body=tagged,
+                                name="journal_pin")
+
+
+@pytest.fixture(scope="module")
+def journal_pkg(tmp_path_factory):
+    path = tmp_path_factory.mktemp("meshcurv") / "journal_pin.scadpkg"
+    capture(build_journal_pin(), str(path), include_scene=False)
+    return str(path)
 
 
 class TestMeshBasics:
@@ -80,3 +110,14 @@ class TestDeterminism:
 class TestGuard:
     def test_unknown_interface_yields_no_faces(self, mesh):
         assert "ghost" not in mesh.interface_faces
+
+
+class TestCurvedInterfaceAssociation:
+    def test_cylindrical_seat_collects_nodes_and_area(self, journal_pkg):
+        """Linear facets sag off a curved face by ~h²/(8R); association
+        must tolerate that sagitta or a cylindrical seat collects nothing."""
+        mesh = mesh_part(load_part(journal_pkg), mesh_size_mm=4.0)
+        face = mesh.interface_faces["seat"][0]
+        assert len(face.nodes) >= 12          # circumference ~63 mm / h=4
+        total = sum(face.tributary_area_mm2.values())
+        assert total == pytest.approx(2 * math.pi * 10.0 * 30.0, rel=0.15)

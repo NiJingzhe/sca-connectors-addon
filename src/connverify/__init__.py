@@ -13,6 +13,7 @@ from .env import (
     KeepOutBox,
     LoadCase,
     Material,
+    MeshStudy,
     MomentLoad,
     PressureLoad,
     VerificationEnv,
@@ -66,11 +67,12 @@ from .package_reader import (
     require_interfaces,
 )
 from .pipeline import verify
-from .render import render_tag_review
+from .render import render_convergence, render_stress_contour, render_tag_review
 from .report import CaseOutcome, VerificationReport
 from .solver import SolveResult, SolverError, SolverNotFoundError, run_solve
+from .meshquality import MeshQualityStats, compute_mesh_quality
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 
 __all__ = [
     "AdhesiveSpec",
@@ -105,6 +107,9 @@ __all__ = [
     "MomentLoad",
     "PressureLoad",
     "VerificationEnv",
+    "MeshStudy",
+    "MeshQualityStats",
+    "compute_mesh_quality",
     "load_part",
     "require_interfaces",
     "LoadedPart",
@@ -115,7 +120,9 @@ __all__ = [
     "parse_frd",
     "FrdResult",
     "verify",
+    "render_stress_contour",
     "render_tag_review",
+    "render_convergence",
     "BoreCounterpart",
     "PlateCounterpart",
     "PlaneCounterpart",

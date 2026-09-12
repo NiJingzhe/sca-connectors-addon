@@ -168,6 +168,43 @@ class KeepOutBox:
 
 
 @dataclass(frozen=True)
+class MeshStudy:
+    """Optional h-refinement mesh-independence study.
+
+    ``sizes_mm`` is canonicalized coarse -> fine (descending). Use a
+    geometric family with a constant ratio (e.g. 12 / 8 / 5.333 at r = 1.5)
+    — only then can observed order, the Richardson limit and GCI be
+    computed. ``qoi_tolerance_pct`` is the acceptance threshold on the
+    finest-pair relative change of the study's quantities of interest.
+    """
+
+    sizes_mm: Tuple[float, ...]
+    qoi_tolerance_pct: float = 2.0
+
+    def __post_init__(self):
+        object.__setattr__(self, "sizes_mm",
+                           tuple(sorted(self.sizes_mm, reverse=True)))
+
+    def to_dict(self) -> dict:
+        return {
+            "sizes_mm": list(self.sizes_mm),
+            "qoi_tolerance_pct": self.qoi_tolerance_pct,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "MeshStudy":
+        sizes = data.get("sizes_mm")
+        if not isinstance(sizes, (list, tuple)) or not all(
+                _finite(s) for s in sizes):
+            raise EnvValidationError([
+                ("mesh_study.sizes_mm",
+                 "must be a list of finite mesh sizes in mm"),
+            ])
+        return cls(sizes_mm=tuple(float(s) for s in sizes),
+                   qoi_tolerance_pct=data.get("qoi_tolerance_pct", 2.0))
+
+
+@dataclass(frozen=True)
 class VerificationEnv:
     name: str
     part_package: str
@@ -176,6 +213,7 @@ class VerificationEnv:
     load_cases: Tuple[LoadCase, ...]
     envelopes: Tuple[KeepOutBox, ...] = ()
     safety_factor_required: float = 1.5
+    mesh_study: Optional[MeshStudy] = None
 
     def __post_init__(self):
         object.__setattr__(self, "interfaces", tuple(self.interfaces))
@@ -203,6 +241,7 @@ class VerificationEnv:
         errors += self._validate_interfaces()
         errors += self._validate_loads()
         errors += self._validate_envelopes()
+        errors += self._validate_mesh_study()
         if errors:
             raise EnvValidationError(errors)
 
@@ -404,6 +443,38 @@ class VerificationEnv:
                     ))
         return errors
 
+    def _validate_mesh_study(self) -> list:
+        if self.mesh_study is None:
+            return []
+        study = self.mesh_study
+        errors: list[Tuple[str, str]] = []
+        if not isinstance(study, MeshStudy):
+            return [("mesh_study", f"must be a MeshStudy, got {type(study).__name__}")]
+        sizes = study.sizes_mm
+        if len(sizes) < 2:
+            errors.append((
+                "mesh_study.sizes_mm",
+                f"a study needs at least two sizes (three for Richardson/"
+                f"GCI), got {len(sizes)}",
+            ))
+        if any(not _finite(s) or s <= 0.0 for s in sizes):
+            errors.append((
+                "mesh_study.sizes_mm",
+                f"all sizes must be finite and > 0 mm, got {sizes!r}",
+            ))
+        if len(set(sizes)) != len(sizes):
+            errors.append((
+                "mesh_study.sizes_mm",
+                f"sizes must be distinct, got {sizes!r}",
+            ))
+        tol = study.qoi_tolerance_pct
+        if not (_finite(tol) and 0.0 < tol <= 25.0):
+            errors.append((
+                "mesh_study.qoi_tolerance_pct",
+                f"must lie in (0, 25] percent, got {tol!r}",
+            ))
+        return errors
+
     # ------------------------------------------------------------ serialize
 
     def to_json(self) -> str:
@@ -426,6 +497,8 @@ class VerificationEnv:
             "load_cases": [_load_case_to_dict(c) for c in self.load_cases],
             "envelopes": [_envelope_to_dict(e) for e in self.envelopes],
         }
+        if self.mesh_study is not None:
+            payload["mesh_study"] = self.mesh_study.to_dict()
         return json.dumps(payload, sort_keys=True, indent=2)
 
     @classmethod
@@ -453,6 +526,8 @@ class VerificationEnv:
             load_cases=tuple(_load_case_from_dict(d) for d in data["load_cases"]),
             envelopes=tuple(_envelope_from_dict(d) for d in data.get("envelopes", [])),
             safety_factor_required=data.get("safety_factor_required", 1.5),
+            mesh_study=(MeshStudy.from_dict(data["mesh_study"])
+                        if data.get("mesh_study") is not None else None),
         )
         env.validate()
         return env

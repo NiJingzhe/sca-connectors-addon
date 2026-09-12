@@ -332,9 +332,10 @@ def counterpart_from_dict(payload: dict):
 
 def validate_counterpart(counterpart) -> list:
     errors = []
-    if getattr(counterpart, "thickness_mm", 0) is not None:
-        if not counterpart.thickness_mm > 0:
-            errors.append(("thickness_mm", f"must be > 0, got {counterpart.thickness_mm}"))
+    thickness = getattr(counterpart, "thickness_mm", None)
+    if thickness is not None and not thickness > 0:
+        errors.append(("thickness_mm",
+                       f"must be > 0, got {thickness}"))
     holes = getattr(counterpart, "holes", None) or ()
     for index, (u, v, d) in enumerate(holes):
         if not d > 0:

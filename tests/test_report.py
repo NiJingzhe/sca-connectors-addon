@@ -101,7 +101,7 @@ class TestPassingReport:
         ).to_json()
         import json
         payload = json.loads(report.to_json())
-        assert payload["schema_version"] == "1.0"
+        assert payload["schema_version"] == "1.1"
         assert payload["verdict"] == "pass"
 
     def test_markdown_mentions_verdict_and_cases(self, report):
@@ -216,3 +216,149 @@ class TestHotspotRanking:
         )
         stresses = [h.von_mises_mpa for h in report.cases[0].hotspots]
         assert stresses == sorted(stresses, reverse=True)
+
+
+def mesh_with_quality(mesh=None, **quality_over):
+    """single_tet_mesh carrying real quality stats (pipeline-built shape)."""
+    from dataclasses import replace
+
+    from connverify.meshquality import compute_mesh_quality
+    base = mesh or single_tet_mesh()
+    quality = compute_mesh_quality(base.nodes, base.tets)
+    if quality_over:
+        quality = replace(quality, **quality_over)
+    return replace(base, quality=quality, target_size_mm=8.0)
+
+
+class TestAnalysisQualitySection:
+    def test_single_mesh_run_declares_independence_not_performed(self):
+        report = build_report(
+            env=make_env(), mesh=mesh_with_quality(),
+            conn_results=good_conn_results(), envelope_results=(),
+            outcomes=[ok_outcome()], face_provenance=PROVENANCE,
+        )
+        assert report.verdict == "pass"
+        md = report.to_markdown()
+        assert "## Mesh quality" in md
+        assert "## Mesh independence" in md
+        assert "not performed" in md
+        assert "mesh_study" in md  # the DSL hint is spelled out
+        assert "## Analysis quality & assumptions" in md
+        assert "C3D4" in md
+
+    def test_analysis_quality_json_carries_quality_and_convergence(self):
+        import json
+        report = build_report(
+            env=make_env(), mesh=mesh_with_quality(),
+            conn_results=good_conn_results(), envelope_results=(),
+            outcomes=[ok_outcome()], face_provenance=PROVENANCE,
+        )
+        payload = json.loads(report.to_json())
+        aq = payload["analysis_quality"]
+        assert aq["mesh"]["quality"]["passed"] is True
+        assert aq["mesh"]["element_type"].startswith("C3D4")
+        assert aq["convergence"]["performed"] is False
+        assert aq["convergence"]["passed"] is None
+        assert aq["assumptions"]
+
+    def test_environment_quotes_the_mesh_size(self):
+        report = build_report(
+            env=make_env(), mesh=mesh_with_quality(),
+            conn_results=good_conn_results(), envelope_results=(),
+            outcomes=[ok_outcome()], face_provenance=PROVENANCE,
+        )
+        assert report.environment["mesh_size_mm"] == pytest.approx(8.0)
+
+
+class TestQualityGateVerdict:
+    def test_failed_quality_gate_fails_the_report_with_feedback(self):
+        from dataclasses import replace
+
+        from connverify.mesh_model import Tet
+        from connverify.meshquality import compute_mesh_quality
+
+        base = single_tet_mesh()
+        # swap two nodes of the single tet -> inverted element
+        inverted = (Tet(element_id=base.tets[0].element_id,
+                        node_ids=(base.tets[0].node_ids[1],
+                                  base.tets[0].node_ids[0],
+                                  base.tets[0].node_ids[2],
+                                  base.tets[0].node_ids[3])),)
+        bad = replace(base,
+                      quality=compute_mesh_quality(base.nodes, inverted),
+                      target_size_mm=8.0)
+        report = build_report(
+            env=make_env(), mesh=bad,
+            conn_results=good_conn_results(), envelope_results=(),
+            outcomes=[ok_outcome()], face_provenance=PROVENANCE,
+        )
+        assert report.verdict == "fail"
+        assert any("inverted" in item for item in report.feedback)
+        md = report.to_markdown()
+        assert "FAIL" in md.split("## Mesh quality")[1].split("##")[0]
+
+    def test_hand_built_mesh_without_quality_still_reports(self):
+        report = build_report(
+            env=make_env(), mesh=single_tet_mesh(),
+            conn_results=good_conn_results(), envelope_results=(),
+            outcomes=[ok_outcome()], face_provenance=PROVENANCE,
+        )
+        assert report.verdict == "pass"
+        assert "not computed" in report.to_markdown()
+
+
+class TestConvergenceVerdict:
+    def _converged_case(self):
+        from connverify.convergence import (
+            QoiPoint, analyze_convergence,
+        )
+        points = tuple(QoiPoint(
+            size_mm=s, node_count=100 * i, tet_count=400 * i,
+            max_von_mises_mpa=v, safety_factor=355.0 / v,
+            max_displacement_mm=0.01)
+            for i, (s, v) in enumerate(zip((20.0, 10.0, 5.0),
+                                           (92.0, 98.0, 99.5))))
+        return analyze_convergence("op", points, qoi_tolerance_pct=2.0)
+
+    def _diverging_case(self):
+        from connverify.convergence import (
+            QoiPoint, analyze_convergence,
+        )
+        points = tuple(QoiPoint(
+            size_mm=s, node_count=100 * i, tet_count=400 * i,
+            max_von_mises_mpa=v, safety_factor=355.0 / v,
+            max_displacement_mm=0.01)
+            for i, (s, v) in enumerate(zip((20.0, 10.0, 5.0),
+                                           (250.0, 290.0, 335.0))))
+        return analyze_convergence("op", points, qoi_tolerance_pct=2.0)
+
+    def test_converged_study_passes_and_is_rendered(self):
+        report = build_report(
+            env=make_env(), mesh=mesh_with_quality(),
+            conn_results=good_conn_results(), envelope_results=(),
+            outcomes=[ok_outcome()], face_provenance=PROVENANCE,
+            convergence=(self._converged_case(),),
+        )
+        assert report.verdict == "pass"
+        md = report.to_markdown()
+        section = md.split("## Mesh independence")[1].split("##")[0]
+        assert "[ok] op" in section
+        assert "observed order" in section
+        assert "GCI" in section
+        aq = report.analysis_quality["convergence"]
+        assert aq["performed"] is True
+        assert aq["passed"] is True
+        assert aq["cases"][0]["gci_fine_pct"] == pytest.approx(0.628, rel=1e-2)
+
+    def test_unconverged_study_fails_with_actionable_feedback(self):
+        report = build_report(
+            env=make_env(), mesh=mesh_with_quality(),
+            conn_results=good_conn_results(), envelope_results=(),
+            outcomes=[ok_outcome()], face_provenance=PROVENANCE,
+            convergence=(self._diverging_case(),),
+        )
+        assert report.verdict == "fail"
+        assert any("did not converge" in item for item in report.feedback)
+        assert any("singular" in item.lower() for item in report.feedback)
+        section = report.to_markdown().split("## Mesh independence")[1]
+        assert "[FAIL] op" in section

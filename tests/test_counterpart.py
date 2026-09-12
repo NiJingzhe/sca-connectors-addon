@@ -352,3 +352,36 @@ class TestEveryKindHasACounterpartPath:
         assert COUNTERPART_FOR_KIND[JointKind.BEARING_SEAT] is BoreCounterpart
         assert COUNTERPART_FOR_KIND[JointKind.WELDED_FILLET] is PlaneCounterpart
         assert COUNTERPART_FOR_KIND[JointKind.ADHESIVE] is PlaneCounterpart
+
+
+class TestCounterpartValidation:
+    def test_validate_accepts_counterparts_without_thickness(self):
+        # BoreCounterpart/SnapCounterpart carry no thickness_mm; a bad
+        # getattr sentinel used to crash here (found by the STEP demo).
+        from connverify.counterpart import validate_counterpart
+
+        assert validate_counterpart(BoreCounterpart(bore_diameter_mm=20.0)) == []
+        assert validate_counterpart(SnapCounterpart()) == []
+
+    def test_env_validate_with_bore_and_snap_counterparts(self):
+        from connverify.env import (
+            ForceLoad, Interface, LoadCase, Material, VerificationEnv,
+        )
+        from connverify.joint_types import PinnedSpec, SnapFitSpec
+
+        env = VerificationEnv(
+            name="counterpart kinds",
+            part_package="part.scadpkg",
+            material=Material(name="steel", youngs_modulus_mpa=210000.0,
+                              poisson_ratio=0.3, yield_strength_mpa=235.0,
+                              density_t_per_mm3=7.85e-9),
+            interfaces=[
+                Interface(name="bore", spec=PinnedSpec(),
+                          counterpart=BoreCounterpart(bore_diameter_mm=6.0)),
+                Interface(name="catch", spec=SnapFitSpec(),
+                          counterpart=SnapCounterpart()),
+            ],
+            load_cases=[LoadCase(name="push",
+                                 loads=[ForceLoad(target="bore", fx_n=1.0)])],
+        )
+        env.validate()  # must not raise
