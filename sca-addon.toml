@@ -1,17 +1,18 @@
 [addon]
 name = "sca-connectors-addon"
-version = "0.6.1"
+version = "0.7.0"
 license = "Apache-2.0"
 skill_path = "skill"
 
 [compat]
-# [runtime].command_prefix and 'sca addon use' first shipped in SDK 2.1.3b3.
-sca = ">=2.1.3b3,<3"
+# {runtime_dir} (runtime state outside the payload) and 'sca addon check'
+# first shipped in SDK 2.1.3b4.
+sca = ">=2.1.3b4,<3"
 
 [runtime]
 kind = "python-env"
 platforms = ["macos-arm64", "macos-x86_64", "linux-x86_64", "linux-aarch64"]
-check_cmd = "python3 -c 'import connverify, gmsh, numpy, simplecadapi' 2>/dev/null || python -c 'import connverify, gmsh, numpy, simplecadapi'"
-# Prefer the interpreter provisioned inside the addon home; fall through to
-# the caller's PATH when it is absent (see README "Runtime provisioning").
-command_prefix = 'PATH="{addon_dir}/.venv/bin:$PATH"'
+check_cmd = "\"{runtime_dir}/.venv/bin/python\" -c \"import importlib.util as u; raise SystemExit(0 if all(u.find_spec(m) for m in ('connverify', 'gmsh', 'numpy', 'simplecadapi')) else 1)\" || python3 -c 'import connverify, gmsh, numpy, simplecadapi'"
+# Runtime state lives in {runtime_dir} (~/.sca/runtimes/<name>): updates
+# replace the payload wholesale but never touch the provisioned venv.
+command_prefix = 'PATH="{runtime_dir}/.venv/bin:$PATH"'

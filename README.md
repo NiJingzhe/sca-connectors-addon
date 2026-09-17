@@ -42,30 +42,25 @@ uv pip install -p .venv/bin/python -e ".[dev]"
 
 ### Runtime provisioning (for `sca` installs)
 
-The addon declares a `python-env` runtime with a command prefix:
-
-```toml
-[runtime]
-command_prefix = 'PATH="{addon_dir}/.venv/bin:$PATH"'
-```
-
-Every dispatch runs through that prefix — `sca addon use` joins it in
-front of your command, and the descriptor's `check_cmd` is probed
-through it too. `{addon_dir}` resolves to the installed addon directory
-(`~/.sca/addons/sca-connectors-addon` by default). Provision the
-interpreter there so the addon owns its environment:
+Runtime state lives OUTSIDE the payload, in the addon's runtime directory
+(`~/.sca/runtimes/sca-connectors-addon`): the descriptor's
+`command_prefix` pins `{runtime_dir}/.venv`, `sca addon update` replaces
+the payload wholesale but never touches that venv, and `sca addon remove`
+deletes it with everything else. Provision it once (simplecadapi is not
+on public PyPI — pass your local SimpleCADAPI checkout):
 
 ```bash
-# inside the installed addon dir — its .venv wins over the caller's PATH
-python3 -m venv .venv
-.venv/bin/python -m pip install -e . numpy gmsh matplotlib simplecadapi
+sca addon use sca-connectors-addon \
+    sh "$SCA_ADDON_DIR/tools/bootstrap_env.sh" /path/to/SimpleCADAPI
+sca addon check sca-connectors-addon     # re-probe now; registry refreshes
 ```
 
-Without that `.venv` the prefix falls through to the caller's `PATH`
-gracefully, so a dev checkout works too. `check_cmd` probes
-`import connverify, gmsh, numpy, simplecadapi`; a failing probe is a
-loud warning, never a silent skip. Point `CONNVERIFY_FEMASTER` at a
-FEMaster binary (see `tools/fetch_femaster.sh`).
+Until the venv exists the probe falls through to the caller's `PATH`
+(a dev checkout works too); a failing probe is a loud warning, never a
+silent skip. The probe itself is hermetic once provisioned: it runs the
+runtime venv's python with `importlib.util.find_spec`, so it neither
+depends on the caller's environment nor pays cold-import time. Point
+`CONNVERIFY_FEMASTER` at a FEMaster binary (see `tools/fetch_femaster.sh`).
 
 ### Verifying the addon descriptor
 
@@ -74,7 +69,8 @@ FEMaster binary (see `tools/fetch_femaster.sh`).
 .venv/bin/sca addon list
 .venv/bin/sca addon use sca-connectors-addon \
     python -c 'import connverify; print(connverify.__version__)'
-.venv/bin/sca addon use sca-connectors-addon    # report prefix + addon dir
+.venv/bin/sca addon use sca-connectors-addon    # report prefix + runtime dir
+.venv/bin/sca addon check sca-connectors-addon  # re-probe the runtime NOW
 ```
 
 The naming standard (repository == descriptor == skill frontmatter) and

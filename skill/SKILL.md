@@ -4,7 +4,7 @@ description: Verify whether a mechanical connection end face actually assembles,
 license: Apache-2.0
 metadata:
   project: sca-connectors-addon
-  version: 0.6.0
+  version: 0.7.0
 ---
 
 # sca-connectors-addon — static connector verification (python package: connverify)
@@ -32,13 +32,27 @@ natural language ──agent──▶ VerificationEnv (Python DSL, validated, JS
 
 ## Pre-check the runtime (once, before first use)
 
-Run everything through the addon's own environment with `sca addon use`
-(the descriptor's `command_prefix` pins the interpreter; `SCA_ADDON_DIR`
-is exported):
+The registry state is a cached install-time probe — ask for the current
+truth:
 
 ```bash
-sca addon use sca-connectors-addon python -c "import connverify, gmsh, numpy, simplecadapi"
-# solver binary — any of:
+sca addon check sca-connectors-addon   # re-probe now, refresh registry
+```
+
+Run everything through the addon's own environment with `sca addon use`
+(the descriptor's `command_prefix` pins the runtime venv in
+`{runtime_dir}`, which `sca addon update` never touches; `SCA_ADDON_DIR`
+and `SCA_RUNTIME_DIR` are exported). If the runtime is not provisioned
+yet:
+
+```bash
+sca addon use sca-connectors-addon \
+    sh "$SCA_ADDON_DIR/tools/bootstrap_env.sh" /path/to/SimpleCADAPI
+```
+
+Solver binary — any of:
+
+```bash
 export CONNVERIFY_FEMASTER=/path/to/FEMaster   # or femaster on PATH,
                                                # or $SCA_ADDON_DIR/vendor/FEMaster
 ```
